@@ -1,0 +1,200 @@
+Function tju_socket: BEGIN
+    创建一个新的TCP套接字sock，将其状态设为CLOSED
+    初始化发送方数据锁
+    将发送方缓冲区设为0
+    初始化接收方数据锁
+    将接收方缓冲区设为0
+    if (初始化条件变量失败) begin
+        打印错误信息，退出
+    endif
+    初始化发送窗口的base、nextseq、rwnd和timeout等变量
+    初始化接收窗口的wnd_recv和expect_seq等变量
+    初始化半连接队列和全连接队列为空
+    设置重传状态为False
+END
+
+Function send_thread: BEGIN
+    从已建立连接的socket列表中取出一个元素sock
+    loop begin
+        if (发送缓冲区中还有没有发送过的数据&&没有在重传&&发送窗口有剩余序列号) begin
+            给发送缓冲区加锁
+            从sock中获取窗口基址、窗口大小和nextseq等信息
+            从sock中获取缓冲区大小、缓冲区发送长度和rwnd等信息
+            if (需发送的数据 < 发送窗口剩余的大小) begin 
+                while (需发送的数据 > 最大数据长度)  begin 
+                    设置发送报文msg的seq和plen
+                    pkt=create_packet(发送报文)
+                    从缓冲区中取出数据
+                    sendToLayer3(msg)
+                    获取当前时刻，开始提取SampleRTT
+                    if (发送窗口的base == nextseq) begin 
+                        start_timer()
+                    endif
+                    滑动窗口
+                endwhile
+                设置发送报文msg的seq和plen
+                if (已发送未接收数据 < rwnd) begin 
+                    设置发送报文msg的seq和plen
+                    pkt=create_packet(发送报文)
+                    从缓冲区中取出数据
+                    sendToLayer3(msg)
+                    获取当前时刻，开始提取SampleRTT
+                    if (发送窗口的base == nextseq) begin 
+                        start_timer()
+                    endif
+                    滑动窗口
+                endif
+                解除sock的发送数据锁
+            endif
+            if (需发送的数据 > 发送窗口剩余的大小) begin 
+                while (需发送窗口可用的序列号大于MAX_DLEN) begin 
+                    设置发送报文msg的seq和plen
+                    pkt=create_packet(发送报文)
+                    从缓冲区中取出数据
+                    sendToLayer3(msg)
+                    获取当前时刻，开始提取SampleRTT
+                    if (发送窗口的base == nextseq) begin 
+                        start_timer()
+                    endif
+                    滑动窗口
+                endwhile
+                设置发送报文msg的seq和plen
+                if (已发送未接收数据 < rwnd) begin 
+                    设置发送报文msg的seq和plen
+                    pkt=create_packet(发送报文)
+                    从缓冲区中取出数据
+                    sendToLayer3(msg)
+                    获取当前时刻，开始提取SampleRTT
+                    if (发送窗口的base == nextseq) begin 
+                        start_timer()
+                    endif
+                    滑动窗口
+                endif
+                解除sock的发送数据锁
+            endif
+        endif
+    endloop
+END
+
+Function tju_buffered: BEGIN
+    while (缓冲区已满) begin 
+        阻塞等待
+    endwhile
+    给sock加上发送数据锁
+    初始化发送缓冲区为空
+    将数据存入发送缓冲区，更新sending_len
+    解除sock的发送数据锁
+END
+
+Function retrans_thread: BEGIN
+    从已建立连接的socket列表中取出一个元素sock
+    loop begin
+        if (重传变量RETRANS为1) begin
+            给发送缓冲区加锁
+            进入重传函数
+            将sock的is_retransing置为0
+            从sock中获取窗口基址、窗口大小和nextseq等信息
+            从sock中获取缓冲区大小、缓冲区发送长度和rwnd等信息
+            用这些信息定义wnd_base、wnd_retrans_size、wnd_next等变量
+                while (需重传的数据 > 最大数据长度)  begin 
+                    设置重传报文msg的seq和plen
+                    pkt=create_packet(发送报文)
+                    从缓冲区中取出数据
+                    sendToLayer3(msg)
+                    获取当前时刻CurrenttTime
+                    if (发送窗口的base == nextseq) begin 
+                        start_timer()
+                    endif
+                    滑动窗口
+                endwhile
+                设置发送报文msg的seq和plen
+                if (已发送未接收数据 < rwnd) begin 
+                    设置重传报文msg的seq和plen
+                    pkt=create_packet(发送报文)
+                    从缓冲区中取出数据
+                    sendToLayer3(msg)
+                    获取当前时刻，开始提取SampleRTT
+                    if (发送窗口的base == nextseq) begin 
+                        start_timer()
+                    endif
+                    滑动窗口
+                endif
+                解除sock的发送数据锁
+            endif
+            if (需发送的数据 > 发送窗口剩余的大小) begin 
+                while (需发送窗口可用的序列号大于MAX_DLEN) begin 
+                    设置发送报文msg的seq和plen
+                    pkt=create_packet(发送报文)
+                    从缓冲区中取出数据
+                    sendToLayer3(msg)
+                    获取当前时刻，开始提取SampleRTT
+                    if (发送窗口的base == nextseq) begin 
+                        start_timer()
+                    endif
+                    滑动窗口
+                endwhile
+                设置发送报文msg的seq和plen
+                if (已发送未接收数据 < rwnd) begin 
+                    设置发送报文msg的seq和plen
+                    pkt=create_packet(发送报文)
+                    从缓冲区中取出数据
+                    sendToLayer3(msg)
+                    获取当前时刻，开始提取SampleRTT
+                    if (发送窗口的base == nextseq) begin 
+                        start_timer()
+                    endif
+                    滑动窗口
+                endif
+                解除sock的发送数据锁
+              重置重传变量RETRANS为0，以期下次调用
+            endif
+        endif
+    endloop
+END
+
+Function tju_handle_packet: BEGIN
+    ...
+    if (sock为ESTABLISHED状态) BEGIN
+        ...
+        if (收到的是ACK报文) begin
+            ...
+            if (收到重复的ACK) begin 
+                if (sock处于慢启动或拥塞避免状态) begin
+                    为ack_cnt加锁，ack_cnt++
+                    解锁
+                endif
+                if (sock处于快速恢复状态) begin
+                    cwnd增加1MSS
+                endif
+                if (ack_cnt==3 && sock不处于快速恢复状态) begin
+                    启动重传，设置信号
+                    将ssthresh置为cwnd/2
+                    将cwnd减少一半  
+                    将sock的拥塞状态置为快速恢复
+                endif
+            endif
+            else begin
+                收到可用于更新的ACK
+                为ack_cnt加锁，ack_cnt置为0
+                解锁
+                if (sock处于慢启动状态) begin
+                    将cwnd扩大1倍
+                    if (cwnd>=ssthresh) begin
+                        将sock的拥塞状态置为拥塞避免
+                    endif    
+                endif
+                else if (sock处于拥塞避免状态) begin
+                    将cwnd增加1MSS
+                endif
+                else if (sock处于快速恢复状态) begin
+                    将cwnd置为ssthresh
+                    将sock的拥塞状态置为拥塞避免
+                endif
+                ...
+            endelse
+            ...
+        endif
+        ...
+    endif
+    ...
+END
